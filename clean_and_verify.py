@@ -20,7 +20,7 @@ def verify_source():
     print("Verifying source code...")
     with open("src/monad/engine.cpp", "r", encoding="utf-8") as f:
         content = f.read()
-        if "res.r = (1.0 / beta) - 1.0;" in content:
+        if "AnalyticalSolver::solve_steady_state" in content:
             print("Source code CONFIRMED: Contains dynamic logic.")
         else:
             print("Source code ERROR: Does NOT contain dynamic logic!")

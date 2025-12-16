@@ -192,9 +192,14 @@ export default function Inspector() {
                         <ParamSlider label="σ (Risk Aversion)" value={params.sigma ?? 2.0}
                             min={0.5} max={5.0} step={0.1} decimals={1}
                             onChange={(v) => handleChange('sigma', v)} />
-                        <ParamSlider label="χ₁ (Adjustment Cost)" value={params.chi1 ?? 5.0}
-                            min={0} max={20} step={0.5} decimals={1}
-                            onChange={(v) => handleChange('chi1', v)} />
+                        <div style={{ opacity: 0.5 }}>
+                            <ParamSlider label="χ₁ (Unused in One-Asset)" value={params.chi1 ?? 5.0}
+                                min={0} max={20} step={0.5} decimals={1}
+                                onChange={(v) => handleChange('chi1', v)} />
+                            <div style={{ fontSize: '0.7rem', color: '#6e7681', marginTop: '-8px', marginBottom: '8px' }}>
+                                ⚠ Two-Asset model parameter (currently disabled)
+                            </div>
+                        </div>
                     </>
                 )}
 

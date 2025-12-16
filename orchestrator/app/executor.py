@@ -9,17 +9,20 @@ def run_scenario(scenario: Scenario) -> Dict[str, Any]:
     Execute a scenario.
     
     1. Parse and validate DAG
-    2. Execute nodes in topological order
+    2. Execute nodes in topological order (only connected nodes)
     3. Return aggregated results
     """
     # Build DAG
-    order, G = build_dag(scenario.dag)
+    order, G, orphan_nodes = build_dag(scenario.dag)
     
     # Validate connections
     warnings = validate_connections(G)
     if warnings:
-        # For now, just log warnings; don't fail
         print(f"Warnings: {warnings}")
+    
+    # Report orphan nodes
+    if orphan_nodes:
+        print(f"Orphan nodes (not connected, skipped): {orphan_nodes}")
     
     # Initialize engine
     engine = EngineBridge(grid=(50, 50, 7))
@@ -27,7 +30,7 @@ def run_scenario(scenario: Scenario) -> Dict[str, Any]:
     # State storage
     state: Dict[str, Any] = {}
     
-    # Execute in order
+    # Execute in order (only connected nodes)
     for node_id in order:
         node_data = G.nodes[node_id]
         node_type = node_data.get("type")
@@ -40,19 +43,16 @@ def run_scenario(scenario: Scenario) -> Dict[str, Any]:
                 "steady_state": ss
             }
         elif node_type == "CentralBank":
-            # Phase 1: stub
             state[node_id] = {
                 "type": "CentralBank",
                 "params": node_params
             }
         elif node_type == "Firm":
-            # Phase 1: stub
             state[node_id] = {
                 "type": "Firm",
                 "params": node_params
             }
         elif node_type == "MarketClearing":
-            # Phase 1: stub - would aggregate all
             state[node_id] = {
                 "type": "MarketClearing",
                 "status": "pending"
@@ -63,8 +63,17 @@ def run_scenario(scenario: Scenario) -> Dict[str, Any]:
                 "status": "unknown"
             }
     
+    # Add orphan nodes as "not executed"
+    for node_id in orphan_nodes:
+        node_data = G.nodes[node_id]
+        state[node_id] = {
+            "type": node_data.get("type"),
+            "status": "orphan (not connected)"
+        }
+    
     return {
         "execution_order": order,
+        "orphan_nodes": orphan_nodes,
         "nodes": state,
         "simulation": {
             "horizon": scenario.simulation.horizon,

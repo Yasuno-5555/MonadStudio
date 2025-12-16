@@ -145,10 +145,19 @@ const useGraphStore = create((set, get) => ({
     },
 
     updateNodeParams: (id, params) => {
+        const newNodes = get().nodes.map(n =>
+            n.id === id ? { ...n, data: { ...n.data, params } } : n
+        );
+
+        // Also update selectedNode if it's the one being updated
+        const selectedNode = get().selectedNode;
+        const newSelectedNode = selectedNode && selectedNode.id === id
+            ? { ...selectedNode, data: { ...selectedNode.data, params } }
+            : selectedNode;
+
         set({
-            nodes: get().nodes.map(n =>
-                n.id === id ? { ...n, data: { ...n.data, params } } : n
-            )
+            nodes: newNodes,
+            selectedNode: newSelectedNode
         });
     },
 

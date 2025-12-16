@@ -99,8 +99,9 @@ function Flow() {
     }, []);
 
     const handleEdgeClick = useCallback((event, edge) => {
+        selectEdge(edge);
         setContextMenu(null);
-    }, []);
+    }, [selectEdge]);
 
     const handleNodeContextMenu = useCallback((event, node) => {
         event.preventDefault();

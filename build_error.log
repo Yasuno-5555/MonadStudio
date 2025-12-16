@@ -1,0 +1,30 @@
+﻿running build_ext
+building 'monad_core' extension
+"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\bin\HostX86\x64\cl.exe" /c /nologo /O2 /W3 /GL /DNDEBUG /MD -Isrc -IC:\Users\kouno\AppData\Local\Programs\Python\Python310\lib\site-packages\pybind11\include -IC:\Users\kouno\AppData\Local\Programs\Python\Python310\include -IC:\Users\kouno\AppData\Local\Programs\Python\Python310\Include "-IC:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\include" "-IC:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\ATLMFC\include" "-IC:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\VS\include" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt" "-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\um" "-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\shared" "-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\winrt" "-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\cppwinrt" "-IC:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\include\um" /EHsc /Tpsrc/monad/engine.cpp /Fobuild\temp.win-amd64-cpython-310\Release\src\monad\engine.obj /EHsc /bigobj /std:c++17
+engine.cpp
+C:\Users\kouno\Desktop\Projects\MonadStudio\src\monad\../ssj/jacobian_builder.hpp(3): fatal error C1083: include ファイルを開けません。'Eigen/Sparse':No such file or directory
+python : error: comman
+d 'C:\\Program Files\\
+Microsoft Visual Studi
+o\\18\\Community\\VC\\
+Tools\\MSVC\\14.50.357
+17\\bin\\HostX86\\x64\
+\cl.exe' failed with e
+xit code 2
+発生場所 行:1 文字:1
++ python setup.py buil
+d_ext --inplace 2>&1 |
+ Out-File -FilePath bu
+ild_e ...
++ ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (error: com   
+ mand ...ith exit     
+code 2:String) []    ,
+ RemoteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
