@@ -7,4 +7,6 @@ monad_core.egg-info/not-zip-safe
 monad_core.egg-info/top_level.txt
 src/monad/engine.cpp
 src/python/bindings.cpp
+src/monad/engine.cpp
+src/python/bindings.cpp
 tests/test_neoclassical.py

@@ -19,11 +19,21 @@ SteadyStateResult MonadEngine::solve_steady_state(
 
     SteadyStateResult res;
     
-    // Mock Scalars
-    res.r = 0.02; // 2% interest rate
-    res.w = 1.05; // Wage
-    res.Y = 1.0;  // Output
-    res.C = res.Y; // C = Y in simplest closed economy
+    // Mock Logic for Phase 2 Verification
+    // Make results sensitive to parameters so UI changes are visible
+    
+    // r is typically related to 1/beta - 1
+    res.r = (1.0 / beta) - 1.0; 
+    
+    // Y might be affected by risk aversion (sigma) in a dummy way
+    // Lower sigma -> Higher intertemporal substitution -> maybe higher activity (mock)
+    res.Y = 1.0 + (2.0 - sigma) * 0.1;
+
+    // Wage roughly proportional to Y
+    res.w = 1.0 * res.Y;
+    
+    // C = Y
+    res.C = res.Y;
 
     // Initialize Distribution
     res.distribution = Distribution3D(Nm_, Na_, Nz_);

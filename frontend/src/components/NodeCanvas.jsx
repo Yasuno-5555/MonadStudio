@@ -1,5 +1,5 @@
 // Node Canvas - Using @xyflow/react with all node types
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import {
     ReactFlow,
     Background,
@@ -18,7 +18,6 @@ import FiscalAuthorityNode from '../nodes/FiscalAuthorityNode';
 import CustomEdge from '../edges/CustomEdge';
 import ContextMenu from './ContextMenu';
 
-// IMPORTANT: nodeTypes must be defined OUTSIDE the component
 const nodeTypes = {
     household: HouseholdNode,
     centralbank: CentralBankNode,
@@ -75,39 +74,38 @@ function NodePalette() {
 }
 
 function Flow() {
+    // Store Selectors
     const nodes = useGraphStore((state) => state.nodes);
     const edges = useGraphStore((state) => state.edges);
-    const selectedNode = useGraphStore((state) => state.selectedNode);
     const onNodesChange = useGraphStore((state) => state.onNodesChange);
     const onEdgesChange = useGraphStore((state) => state.onEdgesChange);
     const onConnect = useGraphStore((state) => state.onConnect);
+    const onNodesDelete = useGraphStore((state) => state.onNodesDelete);
+    const onEdgesDelete = useGraphStore((state) => state.onEdgesDelete);
+
+    // Actions
     const selectNode = useGraphStore((state) => state.selectNode);
-    const deleteEdge = useGraphStore((state) => state.deleteEdge);
+    const selectEdge = useGraphStore((state) => state.selectEdge);
     const deleteNode = useGraphStore((state) => state.deleteNode);
+    const deleteEdge = useGraphStore((state) => state.deleteEdge);
 
     // Context menu state
     const [contextMenu, setContextMenu] = useState(null);
 
-    // Keyboard event handler for Delete key
-    useEffect(() => {
-        const handleKeyDown = (event) => {
-            if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNode) {
-                event.preventDefault();
-                deleteNode(selectedNode.id);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedNode, deleteNode]);
-
     const handleNodeClick = useCallback((event, node) => {
-        selectNode(node);
+        // Selection is handled by onNodesChange, but we can double check or trigger Inspector logic here if needed
+        // React Flow handles selection state internally via changes
         setContextMenu(null);
-    }, [selectNode]);
+    }, []);
+
+    const handleEdgeClick = useCallback((event, edge) => {
+        setContextMenu(null);
+    }, []);
 
     const handleNodeContextMenu = useCallback((event, node) => {
         event.preventDefault();
+        // Also select the node on right click
+        selectNode(node);
         setContextMenu({
             x: event.clientX,
             y: event.clientY,
@@ -115,28 +113,23 @@ function Flow() {
             id: node.id,
             label: node.data.label || node.id
         });
-    }, []);
-
-    const handleEdgeClick = useCallback((event, edge) => {
-        // Just select, don't delete
-        setContextMenu(null);
-    }, []);
+    }, [selectNode]);
 
     const handleEdgeContextMenu = useCallback((event, edge) => {
         event.preventDefault();
+        selectEdge(edge);
         setContextMenu({
             x: event.clientX,
             y: event.clientY,
             type: 'edge',
             id: edge.id,
-            label: `Edge: ${edge.source} → ${edge.target}`
+            label: `Connection`
         });
-    }, []);
+    }, [selectEdge]);
 
     const handlePaneClick = useCallback(() => {
         setContextMenu(null);
-        selectNode(null);
-    }, [selectNode]);
+    }, []);
 
     const handleDeleteFromMenu = useCallback(() => {
         if (contextMenu) {
@@ -156,6 +149,8 @@ function Flow() {
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
+                onNodesDelete={onNodesDelete}
+                onEdgesDelete={onEdgesDelete}
                 onConnect={onConnect}
                 onNodeClick={handleNodeClick}
                 onEdgeClick={handleEdgeClick}
@@ -165,10 +160,14 @@ function Flow() {
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView
+                // Native Deletion Support
+                deleteKeyCode={['Backspace', 'Delete']}
+                // Interaction Settings
                 edgesFocusable={true}
                 edgesReconnectable={true}
                 elementsSelectable={true}
                 selectNodesOnDrag={false}
+                // Default Options
                 defaultEdgeOptions={{
                     style: { strokeWidth: 3, stroke: '#58a6ff' },
                     type: 'custom',

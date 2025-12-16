@@ -1,7 +1,9 @@
 // Zustand store for graph state
 import { create } from 'zustand';
+import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react';
 
 const useGraphStore = create((set, get) => ({
+    // Initial State
     nodes: [
         {
             id: 'hh_1',
@@ -23,71 +25,123 @@ const useGraphStore = create((set, get) => ({
         }
     ],
     edges: [
-        { id: 'e1', source: 'cb_1', target: 'hh_1', sourceHandle: 'r', targetHandle: 'r_a' }
+        {
+            id: 'e1',
+            source: 'cb_1',
+            target: 'hh_1',
+            sourceHandle: 'r',
+            targetHandle: 'r_a',
+            data: { port_out: 'r', port_in: 'r_a' }, // Semantic data
+            type: 'custom',
+            style: { strokeWidth: 3, stroke: '#58a6ff' }
+        }
     ],
 
     selectedNode: null,
     selectedEdge: null,
     results: null,
 
+    // Actions
     setNodes: (nodes) => set({ nodes }),
     setEdges: (edges) => set({ edges }),
 
+    // React Flow Callbacks
     onNodesChange: (changes) => {
-        // Handle position changes, selection, and removal
-        let nodes = get().nodes;
-        let edges = get().edges;
-        let selectedNode = get().selectedNode;
+        const nodes = applyNodeChanges(changes, get().nodes);
+        set({ nodes });
 
-        // Handle removals first
-        const removals = changes.filter(c => c.type === 'remove');
-        if (removals.length > 0) {
-            const removeIds = new Set(removals.map(c => c.id));
-            nodes = nodes.filter(n => !removeIds.has(n.id));
-            edges = edges.filter(e => !removeIds.has(e.source) && !removeIds.has(e.target));
-            if (selectedNode && removeIds.has(selectedNode.id)) {
-                selectedNode = null;
-            }
+        // Handle Selection Sync
+        const selectionChange = changes.find(c => c.type === 'select');
+        if (selectionChange) {
+            const node = nodes.find(n => n.id === selectionChange.id);
+            set({
+                selectedNode: selectionChange.selected ? node : null,
+                selectedEdge: selectionChange.selected ? null : get().selectedEdge // Clear edge selection if node selected
+            });
         }
-
-        // Handle position and selection changes
-        const updated = nodes.map(node => {
-            const change = changes.find(c => c.id === node.id);
-            if (change) {
-                if (change.type === 'position' && change.position) {
-                    return { ...node, position: change.position };
-                }
-                if (change.type === 'select') {
-                    selectedNode = change.selected ? node : null;
-                }
-            }
-            return node;
-        });
-
-        set({ nodes: updated, edges, selectedNode });
     },
 
     onEdgesChange: (changes) => {
-        const edges = get().edges;
-        const updated = edges.filter(edge => {
-            const removeChange = changes.find(c => c.type === 'remove' && c.id === edge.id);
-            return !removeChange;
-        });
-        if (updated.length !== edges.length) {
-            set({ edges: updated });
+        const edges = applyEdgeChanges(changes, get().edges);
+        set({ edges });
+
+        // Handle Edge Selection Sync
+        const selectionChange = changes.find(c => c.type === 'select');
+        if (selectionChange) {
+            const edge = edges.find(e => e.id === selectionChange.id);
+            set({
+                selectedEdge: selectionChange.selected ? edge : null,
+                selectedNode: selectionChange.selected ? null : get().selectedNode // Clear node selection if edge selected
+            });
         }
     },
 
     onConnect: (connection) => {
         const edges = get().edges;
         const newEdge = {
-            id: `e${edges.length + 1}`,
-            source: connection.source,
-            target: connection.target,
-            sourceHandle: connection.sourceHandle,
-            targetHandle: connection.targetHandle
+            ...connection,
+            id: `e_${Date.now()}`,
+            type: 'custom',
+            data: {
+                port_out: connection.sourceHandle,
+                port_in: connection.targetHandle
+            },
+            style: { strokeWidth: 3, stroke: '#58a6ff' }
         };
-        set({ edges: [...edges, newEdge] });
+        set({ edges: addEdge(newEdge, edges) });
+    },
+
+    // Proper Deletion Handlers (called by React Flow)
+    onNodesDelete: (deleted) => {
+        const deletedIds = new Set(deleted.map(n => n.id));
+        const edges = get().edges.filter(
+            e => !deletedIds.has(e.source) && !deletedIds.has(e.target)
+        );
+        set({
+            nodes: get().nodes.filter(n => !deletedIds.has(n.id)),
+            edges,
+            selectedNode: null
+        });
+    },
+
+    onEdgesDelete: (deleted) => {
+        const deletedIds = new Set(deleted.map(e => e.id));
+        set({
+            edges: get().edges.filter(e => !deletedIds.has(e.id)),
+            selectedEdge: null
+        });
+    },
+
+    // Manual Helpers (for Context Menu etc)
+    addNode: (template) => {
+        const newNode = {
+            id: `${template.type}_${Date.now()}`,
+            type: template.type,
+            position: { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 },
+            data: {
+                label: template.label,
+                params: template.params
+            }
+        };
+        set({ nodes: [...get().nodes, newNode] });
+    },
+
+    deleteNode: (id) => {
+        // Just filter it out, onNodesDelete logic is mainly for internal RF hooks
+        // But to keep consistency we manually do the same
+        const edges = get().edges.filter(e => e.source !== id && e.target !== id);
+        set({
+            nodes: get().nodes.filter(n => n.id !== id),
+            edges,
+            selectedNode: null
+        });
+    },
+
+    deleteEdge: (id) => {
+        set({
+            edges: get().edges.filter(e => e.id !== id),
+            selectedEdge: null
+        });
     },
 
     updateNodeParams: (id, params) => {
@@ -98,37 +152,10 @@ const useGraphStore = create((set, get) => ({
         });
     },
 
-    selectNode: (node) => set({ selectedNode: node }),
-
-    setResults: (results) => set({ results }),
-
-    addNode: (template) => {
-        const nodes = get().nodes;
-        const id = `${template.type}_${Date.now()}`;
-        const newNode = {
-            id,
-            type: template.type,
-            position: { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 },
-            data: {
-                label: template.label,
-                params: template.params
-            }
-        };
-        set({ nodes: [...nodes, newNode] });
-    },
-
-    deleteNode: (id) => {
-        const nodes = get().nodes.filter(n => n.id !== id);
-        const edges = get().edges.filter(e => e.source !== id && e.target !== id);
-        set({ nodes, edges, selectedNode: null });
-    },
-
+    selectNode: (node) => set({ selectedNode: node, selectedEdge: null }),
     selectEdge: (edge) => set({ selectedEdge: edge, selectedNode: null }),
 
-    deleteEdge: (id) => {
-        const edges = get().edges.filter(e => e.id !== id);
-        set({ edges, selectedEdge: null });
-    },
+    setResults: (results) => set({ results }),
 
     // Export as scenario.json format
     toScenario: () => {
@@ -138,15 +165,19 @@ const useGraphStore = create((set, get) => ({
             dag: {
                 nodes: nodes.map(n => ({
                     id: n.id,
-                    type: n.type === 'household' ? 'Household' : 'CentralBank',
+                    type: n.type === 'household' ? 'Household' :
+                        n.type === 'firm' ? 'Firm' :
+                            n.type === 'marketclearing' ? 'MarketClearing' :
+                                n.type === 'fiscalauthority' ? 'FiscalAuthority' : 'CentralBank',
                     params: n.data.params,
                     pos: [n.position.x, n.position.y]
                 })),
                 edges: edges.map(e => ({
                     from: e.source,
                     to: e.target,
-                    port_out: e.sourceHandle || 'out',
-                    port_in: e.targetHandle || 'in'
+                    // Use semantic data if available, fallback to handles
+                    port_out: e.data?.port_out || e.sourceHandle || 'out',
+                    port_in: e.data?.port_in || e.targetHandle || 'in'
                 }))
             },
             simulation: {

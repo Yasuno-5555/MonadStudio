@@ -1,4 +1,4 @@
-// Inspector Panel - Parameter editing for all node types
+// Inspector Panel - Parameter editing for all node types & Edges
 import useGraphStore from '../store/graphStore';
 
 const inspectorStyle = {
@@ -48,6 +48,22 @@ const valueStyle = {
     color: '#c9d1d9'
 };
 
+const infoRowStyle = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginBottom: '8px',
+    fontSize: '0.85rem'
+};
+
+const infoLabelStyle = {
+    color: '#8b949e'
+};
+
+const infoValueStyle = {
+    color: '#c9d1d9',
+    fontFamily: 'monospace'
+};
+
 function ParamSlider({ label, value, min, max, step, onChange, decimals = 2 }) {
     return (
         <div style={paramGroupStyle}>
@@ -70,14 +86,66 @@ function ParamSlider({ label, value, min, max, step, onChange, decimals = 2 }) {
 
 export default function Inspector() {
     const selectedNode = useGraphStore((state) => state.selectedNode);
+    const selectedEdge = useGraphStore((state) => state.selectedEdge);
     const updateNodeParams = useGraphStore((state) => state.updateNodeParams);
     const deleteNode = useGraphStore((state) => state.deleteNode);
+    const deleteEdge = useGraphStore((state) => state.deleteEdge);
+
+    if (selectedEdge) {
+        const { id, source, target, data, sourceHandle, targetHandle } = selectedEdge;
+
+        return (
+            <div style={inspectorStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <div style={headerStyle}>Link Info</div>
+                    <button
+                        onClick={() => deleteEdge(id)}
+                        style={{
+                            background: '#f85149',
+                            border: 'none',
+                            color: '#fff',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                        }}
+                    >
+                        Delete
+                    </button>
+                </div>
+
+                <div style={{ background: '#21262d', padding: '12px', borderRadius: '6px', marginBottom: '1rem' }}>
+                    <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Source Node</span>
+                        <span style={infoValueStyle}>{source}</span>
+                    </div>
+                    <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Source Port</span>
+                        <span style={{ ...infoValueStyle, color: '#58a6ff' }}>{data?.port_out || sourceHandle || 'out'}</span>
+                    </div>
+                    <hr style={{ borderColor: '#30363d', margin: '8px 0' }} />
+                    <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Target Node</span>
+                        <span style={infoValueStyle}>{target}</span>
+                    </div>
+                    <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Target Port</span>
+                        <span style={{ ...infoValueStyle, color: '#d29922' }}>{data?.port_in || targetHandle || 'in'}</span>
+                    </div>
+                </div>
+
+                <div style={emptyStyle}>
+                    Semantic connection established.
+                </div>
+            </div>
+        );
+    }
 
     if (!selectedNode) {
         return (
             <div style={inspectorStyle}>
                 <div style={headerStyle}>Inspector</div>
-                <div style={emptyStyle}>Select a node to edit</div>
+                <div style={emptyStyle}>Select a node or link to edit</div>
             </div>
         );
     }
