@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: monad_core
+Version: 0.0.1
+Summary: Monad Core Binding
+Author: MonadAI
+Requires-Python: >=3.7
+Dynamic: author
+Dynamic: requires-python
+Dynamic: summary
