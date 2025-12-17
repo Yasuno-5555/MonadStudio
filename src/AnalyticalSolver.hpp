@@ -27,7 +27,7 @@ public:
         double beta = m_params.get_required("beta");
         double sigma = m_params.get("sigma", 2.0);
         double alpha = m_params.get("alpha", 0.33);
-        double A = m_params.get("A", 1.0);
+        double A = m_params.get("alpha", 0.33);
         
         // Tax System Setup
         Monad::TaxSystem tax_sys;
