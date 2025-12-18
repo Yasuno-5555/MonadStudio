@@ -173,6 +173,7 @@ class MonadCockpit(QMainWindow):
         
         self.current_spec = None
         self.param_widgets = {} # Map param name -> QDoubleSpinBox
+        self.history = [] # For storing multiple run results [(label, res), ...]
 
         # Layout
         main_widget = QWidget()
@@ -193,12 +194,35 @@ class MonadCockpit(QMainWindow):
         form_model.addRow(self.btn_load)
         
         self.combo_model = QComboBox()
+        # Legacy
         self.combo_model.addItem("Two-Asset HANK (Legacy)", "two_asset")
         self.combo_model.addItem("One-Asset HANK (Legacy)", "one_asset")
         self.combo_model.addItem("Representative Agent (Legacy)", "rank")
+        
+        # Presets
+        self.preset_files = {}
+        presets_dir = os.path.join(base_dir, "presets")
+        if os.path.exists(presets_dir):
+            for f in os.listdir(presets_dir):
+                if f.endswith(".yaml") or f.endswith(".yml"):
+                    # Use filename as key, try to read Name from yaml? Too slow? Just filename.
+                    name = os.path.splitext(f)[0].replace("_", " ").title()
+                    path = os.path.join(presets_dir, f)
+                    self.preset_files[name] = path
+                    self.combo_model.addItem(f"Preset: {name}", f"preset:{name}")
+
         self.combo_model.addItem("Custom Descriptor (Active)", "descriptor")
-        self.combo_model.model().item(3).setEnabled(False) # Disabled until loaded
+        # Find index of Custom and disable initially?
+        idx_custom = self.combo_model.findData("descriptor")
+        self.combo_model.model().item(idx_custom).setEnabled(False)
+
         form_model.addRow("Model Type:", self.combo_model)
+        
+        # Description Label
+        self.lbl_desc = QLabel("Select a model preset or load custom file.")
+        self.lbl_desc.setWordWrap(True)
+        self.lbl_desc.setStyleSheet("font-style: italic; color: #666; padding: 5px; background: #f0f0f0; border-radius: 4px;")
+        form_model.addRow(self.lbl_desc)
         
         self.check_sticky = QCheckBox("Sticky Prices (NKPC)")
         self.check_sticky.setChecked(True)
@@ -207,9 +231,9 @@ class MonadCockpit(QMainWindow):
         sidebar_layout.addWidget(grp_model)
         
         # 2. Parameters
-        grp_param = QGroupBox("Structural Parameters")
-        self.form_param = QFormLayout(grp_param)
-        sidebar_layout.addWidget(grp_param)
+        self.grp_param = QGroupBox("Structural Parameters") # Store ref to enable/disable
+        self.form_param = QFormLayout(self.grp_param)
+        sidebar_layout.addWidget(self.grp_param)
         
         # Connect Combo *after* UI setup
         self.combo_model.currentIndexChanged.connect(self.on_model_changed)
@@ -266,12 +290,25 @@ class MonadCockpit(QMainWindow):
         
         sidebar_layout.addWidget(self.grp_adv)
         
-        # Run Button
+        # Run & Clear Buttons
+        btn_layout = QHBoxLayout()
         self.btn_run = QPushButton("RUN SIMULATION")
         self.btn_run.setFixedHeight(50)
         self.btn_run.setStyleSheet("background-color: #2980b9; color: white; font-weight: bold; font-size: 14px;")
         self.btn_run.clicked.connect(self.start_simulation)
-        sidebar_layout.addWidget(self.btn_run)
+        btn_layout.addWidget(self.btn_run, 3)
+        
+        self.btn_clear = QPushButton("Clear\nPlots")
+        self.btn_clear.setFixedHeight(50)
+        self.btn_clear.clicked.connect(self.clear_plots)
+        btn_layout.addWidget(self.btn_clear, 1)
+        
+        self.btn_export = QPushButton("Export\nFigure")
+        self.btn_export.setFixedHeight(50)
+        self.btn_export.clicked.connect(self.export_plots)
+        btn_layout.addWidget(self.btn_export, 1)
+        
+        sidebar_layout.addLayout(btn_layout)
         
         # Status
         self.lbl_status = QLabel("Ready")
@@ -312,45 +349,63 @@ class MonadCockpit(QMainWindow):
         if os.path.exists(default_yaml):
             self.load_model_yaml(default_yaml)
 
-    def load_model_yaml(self, path=None):
-        silent = (path is not None)
-        if path is None:
-            fname, _ = QFileDialog.getOpenFileName(self, "Open Model Descriptor", "", "YAML Files (*.yaml *.yml)")
-            if not fname:
-                return
-        else:
-            fname = path
-            
+    def _load_spec_from_path(self, path):
         try:
-            with open(fname, 'r', encoding='utf-8') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 content = f.read()
-                
             self.current_spec = ModelSpec.from_yaml(content)
-            self.statusBar().showMessage(f"Loaded: {self.current_spec.name}")
             
-            # Enable and Switch Combo (Triggering on_model_changed -> setup_descriptor_ui)
-            block = self.combo_model.blockSignals(True) # Block briefly to enable item
-            idx = self.combo_model.findText("Custom Descriptor (Active)")
+            # Update Description
+            desc = self.current_spec.description
+            if not desc: desc = "No description available."
+            self.lbl_desc.setText(desc)
+            
+            return True
+        except Exception as e:
+            print(f"Error loading {path}: {e}")
+            return False
+
+    def load_model_yaml(self, path=None):
+        # Button handler or explicit load
+        fname = path
+        if fname is None:
+            fname, _ = QFileDialog.getOpenFileName(self, "Open Model Descriptor", "", "YAML Files (*.yaml *.yml)")
+            if not fname: return
+
+        if self._load_spec_from_path(fname):
+            self.statusBar().showMessage(f"Loaded Custom: {self.current_spec.name}")
+            
+            # Enable Custom Item
+            idx = self.combo_model.findData("descriptor")
             if idx >= 0:
                 self.combo_model.model().item(idx).setEnabled(True)
-            self.combo_model.blockSignals(False)
-            
-            # Now switch (triggers signal)
-            self.combo_model.setCurrentIndex(idx)
                 
-            if not silent:
-                QMessageBox.information(self, "Success", f"Model '{self.current_spec.name}' loaded successfully.\n{len(self.current_spec.equations)} Equations.")
-            else:
-                print(f"[AutoLoad] Model '{self.current_spec.name}' loaded.")
+            # Switch to Custom (triggers on_model_changed)
+            # Use blockSignals to avoid double-loading if we want, but simple switch is fine
+            self.combo_model.setCurrentIndex(idx)
             
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load model:\n{e}")
+            if path is None: # Only show dialog success for manual load
+                QMessageBox.information(self, "Success", f"Model '{self.current_spec.name}' loaded.")
 
     def on_model_changed(self, index):
-        data = self.combo_model.itemData(index)
-        if data == "descriptor":
+        data = str(self.combo_model.itemData(index))
+        self.grp_param.setEnabled(True) # Default unlock
+        
+        if data.startswith("preset:"):
+            name = data.replace("preset:", "")
+            path = self.preset_files.get(name)
+            if path and self._load_spec_from_path(path):
+                self.setup_descriptor_ui()
+                self.grp_param.setEnabled(False) # LOCK for Presets
+                self.statusBar().showMessage(f"Loaded Preset: {name}")
+                
+        elif data == "descriptor":
             self.setup_descriptor_ui()
+            # Unlocked for custom
+            
         else:
+            # Legacy
+            self.current_spec = None
             self.setup_legacy_ui()
 
     def _clear_params(self):
@@ -401,7 +456,8 @@ class MonadCockpit(QMainWindow):
         self.lbl_status.setStyleSheet("color: orange; font-weight: bold;")
         
         # Determine Mode
-        is_descriptor = (self.combo_model.currentText() == "Custom Descriptor (Active)")
+        # If we have a loaded spec (Custom or Preset), use Descriptor Mode
+        is_descriptor = (self.current_spec is not None)
         
         try:
             # Common Experiment Config
@@ -422,23 +478,24 @@ class MonadCockpit(QMainWindow):
                 }
 
             if is_descriptor:
-                # --- Descriptor Path ---
-                print("Running in Descriptor Mode...")
-                # Update Spec Params from GUI
+                # --- Descriptor Path (Custom OR Preset) ---
+                print(f"Running in Descriptor Mode: {self.current_spec.name}")
+                
+                # Update Spec Params from GUI (Only if widgets exist/enabled)
+                # If locked (Preset), this effectively does nothing or re-sets same values.
                 for pname, widget in self.param_widgets.items():
-                    self.current_spec.parameters[pname].value = widget.value()
+                    if pname in self.current_spec.parameters:
+                        self.current_spec.parameters[pname].value = widget.value()
                 
                 # Instantiate Solver
-                # T=50 fixed for demo
-                solver = DSGEStaticSolver(self.current_spec, T=50)
+                # Check for Blocks -> SSJ
+                if self.current_spec.blocks:
+                     print("[GUI] Detected Blocks. Using LinearSSJSolver (HANK Bridge).")
+                     solver = LinearSSJSolver(self.current_spec, T=50)
+                else:
+                     solver = DSGEStaticSolver(self.current_spec, T=50)
                 
-                # We need to set initial/terminal based on shock?
-                # For DSGE, shocks usually enter via Exogenous Process or Initial Displacement.
-                # Simplest: "Shock" means setting the exogenous variable path?
-                # Or setting Initial state if it's a state variable.
-                # In generic_nk.py, we set initial_state.
-                
-                # Pass this "solver" as the model to Worker
+                # Pass solver as model
                 model = solver
                 
             else:
@@ -446,8 +503,8 @@ class MonadCockpit(QMainWindow):
                 model_type = self.combo_model.currentData()
                 
                 # Retrieve params from widgets (safely)
-                alpha = self.param_widgets['alpha'].value()
-                chi = self.param_widgets['chi'].value()
+                alpha = self.param_widgets['alpha'].value() if 'alpha' in self.param_widgets else 0.33
+                chi = self.param_widgets['chi'].value() if 'chi' in self.param_widgets else 1.0
                 
                 is_sticky = self.check_sticky.isChecked()
                 kappa = 0.1 if is_sticky else 100.0
@@ -471,69 +528,135 @@ class MonadCockpit(QMainWindow):
         self.lbl_status.setStyleSheet("color: red;")
         QMessageBox.critical(self, "Error", msg)
 
+    def clear_plots(self):
+        self.history = []
+        self.canvas_agg.fig.clear()
+        self.canvas_agg.draw()
+        self.canvas_ineq.fig.clear() # Optional: Clear others too
+        self.canvas_ineq.draw()
+        self.canvas_mech.fig.clear()
+        self.canvas_mech.draw()
+
+    def export_plots(self):
+        if not self.history:
+             QMessageBox.warning(self, "No Data", "Run simulation first.")
+             return
+             
+        fname, _ = QFileDialog.getSaveFileName(self, "Export Figure", "monad_experiment.png", "PNG Image (*.png);;PDF Document (*.pdf)")
+        if not fname: return
+        
+        try:
+            from datetime import datetime
+            
+            # Generate Caption
+            labels = [h['label'] for h in self.history]
+            scenarios = ", ".join(labels)
+            date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            caption = f"Generated by Monad Studio | {date_str}\nScenarios: {scenarios}"
+            
+            fig = self.canvas_agg.fig
+            
+            # Add footer
+            fig.subplots_adjust(bottom=0.15)
+            text_obj = fig.text(0.5, 0.02, caption, ha='center', va='bottom', fontsize=8, color='#555', family='monospace')
+            
+            fig.savefig(fname, dpi=150) # Standard save
+            
+            # Cleanup
+            text_obj.remove()
+            fig.subplots_adjust(bottom=0.05) # Reset
+            self.canvas_agg.draw()
+            
+            self.statusBar().showMessage(f"Exported to {fname}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
+
     def on_finished(self, results):
         self.btn_run.setEnabled(True)
         self.lbl_status.setText("Complete")
         self.lbl_status.setStyleSheet("color: green;")
         
+        # Add to history
+        if self.current_spec:
+            name = self.current_spec.name
+        else:
+            name = self.combo_model.currentText()
+            
+        # Add timestamp or iterator?
+        count = len(self.history) + 1
+        label = f"#{count} {name}"
+        self.history.append({'label': label, 'res': results})
+        
         # Plotting
-        self.plot_aggregate(results)
-        self.plot_inequality(results)
-        self.plot_mechanisms(results)
+        self.plot_aggregate()
+        self.plot_inequality(results) # Inequality usually just latest run
+        self.plot_mechanisms(results) # Mechanisms just latest run
 
-    def plot_aggregate(self, res):
+    def plot_aggregate(self):
         try:
             canvas = self.canvas_agg
             canvas.fig.clear()
             
-            # Determine variables to plot
-            # Filter out internal/analysis keys
-            all_vars = [k for k in res.keys() if not k.startswith('analysis') and not k.startswith('d')]
+            if not self.history:
+                canvas.draw()
+                return
+                
+            # Use variables from the LAST run to determine layout
+            latest_res = self.history[-1]['res']
             
-            # Prioritize standard macro vars
+            # Filter vars
+            all_vars = [k for k in latest_res.keys() if not k.startswith('analysis') and not k.startswith('d')]
             priority = ['y', 'pi', 'i', 'Y', 'C_agg']
             vars = []
             for p in priority:
                 if p in all_vars:
                     vars.append(p)
                     all_vars.remove(p)
-            
-            # Fill with others up to 4
             vars.extend(all_vars[:4-len(vars)])
             
-            # Subplots logic
             n = len(vars)
-            if n == 0: 
-                canvas.draw()
-                return
+            if n == 0: return
             
             rows = 2 if n > 2 else 1
             cols = 2 if n > 1 else 1
             
-            # Time axis
-            first_key = vars[0]
-            t = np.arange(len(res[first_key]))
+            colors = ['#2980b9', '#e74c3c', '#27ae60', '#8e44ad', '#f39c12', '#34495e']
+            styles = ['-', '--', '-.', ':']
             
+            # Loop Subplots
             for i, var in enumerate(vars):
                 ax = canvas.fig.add_subplot(rows, cols, i+1)
+                ax.set_title(var)
+                ax.grid(True, alpha=0.3)
+                ax.axhline(0, c='k', lw=0.5)
                 
-                if var in res:
-                    y = res[var]
-                    # Robust check for array
-                    if not isinstance(y, np.ndarray):
-                        y = np.array(y)
+                # Loop History
+                for j, item in enumerate(self.history):
+                    res = item['res']
+                    label = item['label']
+                    
+                    if var in res:
+                        y = res[var]
+                        if not isinstance(y, np.ndarray): y = np.array(y)
                         
-                    # Auto-scale check
-                    is_small = (np.max(np.abs(y)) < 0.2 and np.max(np.abs(y)) > 1e-6)
-                    label = var
-                    if is_small: 
-                        y = y * 100
-                        label += " (%)"
+                        # Auto-scale check (based on latest run usually, or check all?)
+                        # Checking latest is safer for consistent scale across lines?
+                        # No, transform check should be generic.
+                        # If values are small (<0.2), assume %
+                        # But mixing large and small might be weird.
+                        # Assuming consistent units across comparisons.
                         
-                    ax.plot(t, y, lw=2, color='#2c3e50')
-                    ax.axhline(0, c='gray', ls='--', lw=0.5)
-                    ax.set_title(label)
-                    ax.grid(True, alpha=0.3)
+                        is_small = (np.max(np.abs(y)) < 0.2 and np.max(np.abs(y)) > 1e-6)
+                        if is_small: y = y * 100
+                        
+                        c = colors[j % len(colors)]
+                        ls = styles[(j // len(colors)) % len(styles)]
+                        
+                        ax.plot(y, label=label, color=c, ls=ls, lw=2, alpha=0.9)
+                
+                if i == 0: # Legend only on first plot to save space
+                    ax.legend(fontsize='small')
                     
             canvas.fig.tight_layout()
             canvas.draw()
